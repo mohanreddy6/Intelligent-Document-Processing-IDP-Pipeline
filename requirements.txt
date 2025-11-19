@@ -10,3 +10,4 @@ pytest
 flask-cors
 pytesseract
 Pillow
+openai
