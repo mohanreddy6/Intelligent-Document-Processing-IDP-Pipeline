@@ -8,3 +8,5 @@ gunicorn
 openai
 pytest
 flask-cors
+pytesseract
+Pillow
