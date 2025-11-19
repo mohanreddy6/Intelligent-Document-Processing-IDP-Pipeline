@@ -1,94 +1,119 @@
 # src/llm/extract.py
-
 import os
 import json
 from openai import OpenAI
 
-
 def extract_structured(raw_text: str):
     """
-    LLM-based structured extraction for invoices/receipts.
+    LLM-based structured extraction with safe JSON repair.
+    Never throws JSONDecodeError.
     """
 
-    # Create client inside function
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+    # 1. Ask model for JSON
     prompt = f"""
-    Extract structured invoice/receipt data from this text:
+You are an OCR invoice parser. 
+Extract structured JSON ONLY.
 
-    {raw_text}
+TEXT:
+{raw_text}
 
-    Return ONLY valid JSON in this structure:
+Return ONLY this JSON structure:
 
-    {{
-      "vendor": {{
-        "name": "",
-        "address": "",
-        "phone": "",
-        "date": "",
-        "time": "",
-        "invoice_no": ""
-      }},
-      "items": [
-        {{
-          "description": "",
-          "qty": 0,
-          "unit_price": 0,
-          "total": 0,
-          "sku": ""
-        }}
-      ],
-      "payment": {{
-        "method": "",
-        "currency": "USD",
-        "subtotal": 0,
-        "tax": 0,
-        "tip": 0,
-        "total": 0
-      }},
-      "_math": {{
-        "status": "ok",
-        "note": ""
-      }},
-      "raw_text": ""
-    }}
+{{
+  "vendor": {{
+    "name": "",
+    "address": "",
+    "phone": "",
+    "date": "",
+    "time": "",
+    "invoice_no": ""
+  }},
+  "items": [],
+  "payment": {{
+    "method": "",
+    "currency": "USD",
+    "subtotal": 0,
+    "tax": 0,
+    "tip": 0,
+    "total": 0
+  }},
+  "_math": {{
+    "status": "ok",
+    "note": ""
+  }},
+  "raw_text": ""
+}}
     """
 
-    # FIRST CALL — generation
+    # Ask LLM
     resp = client.responses.create(
-        model="gpt-4o-mini",
+        model="gpt-4.1-mini",
         input=prompt,
         temperature=0
     )
 
-    raw = resp.output[0].content[0].text.strip()
+    raw_output = resp.output[0].content[0].text.strip()
 
-    # If JSON loads fine, return
+    # 2. If output is empty → fallback
+    if not raw_output:
+        return _fallback_model()
+
+    # 3. Try load JSON directly
     try:
-        data = json.loads(raw)
+        data = json.loads(raw_output)
+        return _wrap(data)
+    except:
+        pass  # Continue to repair step
 
-    except json.JSONDecodeError:
-        # Repair JSON
-        repair_prompt = f"""
-        The following text is INVALID JSON. Fix it and output ONLY valid JSON:
+    # 4. Try repairing JSON
+    repair_prompt = f"Fix this so it becomes valid JSON ONLY:\n\n{raw_output}"
+    fix = client.responses.create(
+        model="gpt-4.1-mini",
+        input=repair_prompt,
+        temperature=0
+    )
 
-        {raw}
-        """
+    fixed = fix.output[0].content[0].text.strip()
 
-        repair = client.responses.create(
-            model="gpt-4o-mini",
-            input=repair_prompt,
-            temperature=0
-        )
-
-        fixed = repair.output[0].content[0].text.strip()
+    try:
         data = json.loads(fixed)
+        return _wrap(data)
+    except:
+        return _fallback_model()
 
-    class DummyModel:
-        def __init__(self, d):
-            self.d = d
 
-        def model_dump(self):
-            return self.d
+# ---------- helper wrappers ----------
+class DummyModel:
+    def __init__(self, d):
+        self.d = d
+    def model_dump(self):
+        return self.d
 
-    return DummyModel(data)
+def _wrap(d):
+    return DummyModel(d)
+
+def _fallback_model():
+    # return empty safe structure instead of crashing
+    return DummyModel({
+        "vendor": {
+            "name": "",
+            "address": "",
+            "phone": "",
+            "date": "",
+            "time": "",
+            "invoice_no": ""
+        },
+        "items": [],
+        "payment": {
+            "method": "",
+            "currency": "USD",
+            "subtotal": 0,
+            "tax": 0,
+            "tip": 0,
+            "total": 0
+        },
+        "_math": { "status": "failed", "note": "LLM returned invalid JSON" },
+        "raw_text": ""
+    })
