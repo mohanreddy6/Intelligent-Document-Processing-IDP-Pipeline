@@ -8,18 +8,18 @@ from openai import OpenAI
 def extract_structured(raw_text: str):
     """
     LLM-based structured extraction for invoices/receipts.
+    Returns a dict via DummyModel().model_dump() to match server expectations.
     """
 
-    # CREATE CLIENT INSIDE FUNCTION, NEVER AT IMPORT TIME
     key = os.getenv("OPENAI_API_KEY")
     client = OpenAI(api_key=key)
 
-    # UNIVERSAL INVOICE PARSING PROMPT
     prompt = f"""
-You are a highly accurate invoice/receipt parsing engine.
+Extract structured invoice or receipt data from the following text:
 
-Extract structured data from the OCR text below and 
-return ONLY valid JSON in this exact structure, regardless of invoice layout:
+{raw_text}
+
+Return ONLY valid JSON in this exact format:
 
 {{
   "vendor": {{
@@ -48,15 +48,28 @@ return ONLY valid JSON in this exact structure, regardless of invoice layout:
     "total": 0
   }},
   "_math": {{
-    "status": "",
+    "status": "ok",
     "note": ""
   }},
-  "raw_text": ""
+  "raw_text": "{raw_text.replace('"', "'")}"
 }}
+"""
 
-RULES:
-- Automatically identify all line items.
-- Automatically extract vendor information.
-- Automatically extract invoice number, date, time, phone, address.
-- Automatically extract subtotal, tax, tip, total.
-- Automatically detect payment method (ACH, VISA, Mastercard, Cash, etc).
+    # Call LLM
+    resp = client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt,
+        temperature=0
+    )
+
+    json_str = resp.output[0].content[0].text
+    data = json.loads(json_str)
+
+    # Match server expectation
+    class DummyModel:
+        def __init__(self, d):
+            self.d = d
+        def model_dump(self):
+            return self.d
+
+    return DummyModel(data)
