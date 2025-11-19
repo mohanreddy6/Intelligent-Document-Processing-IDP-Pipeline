@@ -7,3 +7,4 @@ opencv-python
 gunicorn
 openai
 pytest
+flask-cors
