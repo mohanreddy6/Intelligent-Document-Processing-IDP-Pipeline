@@ -1,6 +1,14 @@
 # Python slim base
 FROM python:3.11-slim
 
+# Install Tesseract OCR
+RUN apt-get update && apt-get install -y \
+    tesseract-ocr \
+    libtesseract-dev \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+
 # Install system deps + Tesseract OCR
 RUN apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends \
     tesseract-ocr \
