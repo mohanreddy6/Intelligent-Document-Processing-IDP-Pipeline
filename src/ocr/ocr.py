@@ -2,14 +2,22 @@ import pytesseract
 from PIL import Image
 import io
 
-def ocr_text(file_stream):
+def ocr_text(file_or_image):
     """
-    Performs OCR on the uploaded image using Tesseract.
+    Handles both:
+    - Flask uploaded file stream
+    - Pillow Image objects
     """
-    # Open image from the file stream
-    image = Image.open(file_stream.stream).convert("RGB")
 
-    # Perform OCR
+    # CASE 1: Already a Pillow Image (common in your pipeline)
+    if isinstance(file_or_image, Image.Image):
+        image = file_or_image
+
+    else:
+        # CASE 2: Raw file upload stream
+        # Convert the raw stream into a Pillow image
+        image = Image.open(file_or_image).convert("RGB")
+
+    # Run OCR
     text = pytesseract.image_to_string(image)
-
     return text
