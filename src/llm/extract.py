@@ -4,14 +4,15 @@ import os
 import json
 from openai import OpenAI
 
+
 def extract_structured(raw_text: str):
     """
-    LLM-based structured extraction with JSON repair fallback.
+    LLM-based structured extraction for invoices.
+    Guarantees valid JSON (auto-repair if needed).
     """
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # Prompt is SHORTER + MUCH SAFER (reduces JSON hallucination)
     prompt = f"""
 Extract structured invoice data and return ONLY valid JSON.
 
@@ -53,35 +54,48 @@ JSON format:
 }}
 """
 
+    # FIRST TRY
     resp = client.responses.create(
-        model="gpt-4.1-mini",
+        model="gpt-4.1-turbo",
         input=prompt,
         temperature=0
     )
 
-    json_str = resp.output[0].content[0].text.strip()
+    # Extract model output
+    first = resp.output[0].content[0].text.strip()
 
-    # -------- FIX: Repair JSON if broken ------
+    # Try to JSON-parse
     try:
-        data = json.loads(json_str)
+        data = json.loads(first)
     except Exception:
-        # Ask model to fix JSON
-        repair_prompt = f"""
-Fix and return ONLY valid JSON:
+        # SECOND TRY — JSON REPAIR
+        repair_prompt = f"Fix this into valid JSON ONLY:\n{first}"
 
-{json_str}
-"""
         repair = client.responses.create(
-            model="gpt-4.1-mini",
+            model="gpt-4.1-turbo",
             input=repair_prompt,
             temperature=0
         )
-        data = json.loads(repair.output[0].content[0].text.strip())
-    # ------------------------------------------
 
+        repaired = repair.output[0].content[0].text.strip()
+
+        try:
+            data = json.loads(repaired)
+        except Exception:
+            # FINAL FALLBACK — return safe empty object
+            data = {
+                "vendor": {},
+                "items": [],
+                "payment": {},
+                "_math": {"status": "error", "note": "LLM failed twice"},
+                "raw_text": raw_text
+            }
+
+    # Server expects .model_dump()
     class DummyModel:
         def __init__(self, d):
             self.d = d
+
         def model_dump(self):
             return self.d
 
