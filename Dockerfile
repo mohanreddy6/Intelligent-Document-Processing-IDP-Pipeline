@@ -34,5 +34,6 @@ ENV DRY_RUN=1 \
 
 # Start with Gunicorn for production-ish serving
 # (Flask dev server is fine locally, but Gunicorn is standard)
-CMD ["sh", "-c", "gunicorn -w 2 -b 0.0.0.0:${PORT:-8000} src.app.server:app"]
+CMD ["sh", "-c", "gunicorn --workers 1 --threads 1 --timeout 120 -b 0.0.0.0:${PORT:-8000} src.app.server:app"]
+
 
