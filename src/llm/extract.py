@@ -8,16 +8,14 @@ from openai import OpenAI
 def extract_structured(raw_text: str):
     """
     LLM-based structured extraction for invoices/receipts.
-    Returns a pydantic-like object with .model_dump() for server compatibility.
     """
 
-    # IMPORTANT: Create the client here, NOT at import time.
-    # This prevents import failures in server.py.
-    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    # CREATE CLIENT INSIDE FUNCTION, NEVER AT IMPORT TIME
+    key = os.getenv("OPENAI_API_KEY")
+    client = OpenAI(api_key=key)
 
     prompt = f"""
-    You are an invoice/receipt parsing engine.
-    Extract structured data from the following OCR text:
+    Extract structured invoice data from this text:
 
     {raw_text}
 
@@ -51,3 +49,25 @@ def extract_structured(raw_text: str):
       }},
       "_math": {{
         "status": "ok",
+        "note": ""
+      }},
+      "raw_text": ""
+    }}
+    """
+
+    resp = client.responses.create(
+        model="gpt-4.1-mini",
+        input=prompt,
+        temperature=0
+    )
+
+    json_str = resp.output[0].content[0].text
+    data = json.loads(json_str)
+
+    class DummyModel:
+        def __init__(self, d):
+            self.d = d
+        def model_dump(self):
+            return self.d
+
+    return DummyModel(data)
