@@ -1,27 +1,24 @@
 # src/ocr/ocr.py
+from openai import OpenAI
+import os
 
-import pytesseract
-from PIL import Image
+def ocr_text(image):
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-def ocr_text(file_or_image):
-    """
-    Real OCR with image resizing to prevent Render memory crash.
-    """
+    # Convert to bytes
+    import io
+    buf = io.BytesIO()
+    image.save(buf, format="PNG")
+    img_bytes = buf.getvalue()
 
-    # CASE 1: Already a Pillow Image
-    if isinstance(file_or_image, Image.Image):
-        image = file_or_image.convert("RGB")
-    else:
-        # CASE 2: Flask file upload
-        image = Image.open(file_or_image).convert("RGB")
+    response = client.responses.create(
+        model="gpt-4.1-mini",
+        input=[
+            {"role": "user", "content": [
+                {"type": "input_image", "image": img_bytes},
+                {"type": "text", "text": "Extract all text accurately."}
+            ]}
+        ]
+    )
 
-    # RESIZE LARGE IMAGES (critical for Render free tier)
-    MAX_WIDTH = 1200
-    if image.width > MAX_WIDTH:
-        ratio = MAX_WIDTH / float(image.width)
-        new_height = int(image.height * ratio)
-        image = image.resize((MAX_WIDTH, new_height), Image.LANCZOS)
-
-    # Run Tesseract
-    text = pytesseract.image_to_string(image)
-    return text
+    return response.output[0].content[0].text
