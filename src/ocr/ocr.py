@@ -4,20 +4,23 @@ import io
 
 def ocr_text(file_or_image):
     """
-    Handles both:
-    - Flask uploaded file stream
-    - Pillow Image objects
+    Real OCR with image resizing to prevent Render memory crash.
     """
 
-    # CASE 1: Already a Pillow Image (common in your pipeline)
+    # CASE 1: Already a Pillow Image
     if isinstance(file_or_image, Image.Image):
-        image = file_or_image
-
+        image = file_or_image.convert("RGB")
     else:
-        # CASE 2: Raw file upload stream
-        # Convert the raw stream into a Pillow image
+        # CASE 2: Flask file upload
         image = Image.open(file_or_image).convert("RGB")
 
-    # Run OCR
+    # RESIZE LARGE IMAGES (critical for Render free tier)
+    MAX_WIDTH = 1200
+    if image.width > MAX_WIDTH:
+        ratio = MAX_WIDTH / float(image.width)
+        new_height = int(image.height * ratio)
+        image = image.resize((MAX_WIDTH, new_height), Image.LANCZOS)
+
+    # Run Tesseract
     text = pytesseract.image_to_string(image)
     return text
