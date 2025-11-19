@@ -9,23 +9,23 @@ from PIL import Image
 
 def ocr_text(image: Image.Image) -> str:
     """
-    OCR using OpenAI vision. Takes a PIL Image and returns plain text.
+    OCR using OpenAI Vision. Returns plain text.
     """
 
-    # Create client
+    # Create client from environment variable
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # Convert image to PNG bytes
+    # Convert PIL image → PNG bytes
     buf = io.BytesIO()
     image.save(buf, format="PNG")
     img_bytes = buf.getvalue()
 
-    # Base64 encode for data URL
+    # Base64 encode into data URL
     b64 = base64.b64encode(img_bytes).decode("utf-8")
     data_url = f"data:image/png;base64,{b64}"
 
-    # Call vision model
-    resp = client.responses.create(
+    # LLM vision OCR using correct content types
+    response = client.responses.create(
         model="gpt-4.1-mini",
         input=[
             {
@@ -33,14 +33,14 @@ def ocr_text(image: Image.Image) -> str:
                 "content": [
                     {"type": "input_image", "image_url": data_url},
                     {
-                        "type": "text",
-                        "text": "Read all text on this invoice/receipt and return it as plain text only."
-                    },
+                        "type": "input_text",
+                        "text": "Extract all the text from this image accurately. Return plain text only."
+                    }
                 ],
             }
         ],
-        temperature=0,
+        temperature=0
     )
 
-    # Extract the text from the response
-    return resp.output[0].content[0].text
+    # Extract raw text
+    return response.output[0].content[0].text
