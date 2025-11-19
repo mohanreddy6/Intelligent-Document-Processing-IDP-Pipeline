@@ -62,3 +62,33 @@ def extract_structured(raw_text: str):
     )
 
     raw = resp.output[0].content[0].text.strip()
+
+    # If JSON loads fine, return
+    try:
+        data = json.loads(raw)
+
+    except json.JSONDecodeError:
+        # Repair JSON
+        repair_prompt = f"""
+        The following text is INVALID JSON. Fix it and output ONLY valid JSON:
+
+        {raw}
+        """
+
+        repair = client.responses.create(
+            model="gpt-4o-mini",
+            input=repair_prompt,
+            temperature=0
+        )
+
+        fixed = repair.output[0].content[0].text.strip()
+        data = json.loads(fixed)
+
+    class DummyModel:
+        def __init__(self, d):
+            self.d = d
+
+        def model_dump(self):
+            return self.d
+
+    return DummyModel(data)
