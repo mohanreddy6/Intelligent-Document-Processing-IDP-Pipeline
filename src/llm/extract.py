@@ -4,23 +4,21 @@ import os
 import json
 from openai import OpenAI
 
-
 def extract_structured(raw_text: str):
     """
-    LLM-based structured extraction for invoices/receipts.
-    Returns a dict via DummyModel().model_dump() to match server expectations.
+    LLM-based structured extraction with JSON repair fallback.
     """
 
-    key = os.getenv("OPENAI_API_KEY")
-    client = OpenAI(api_key=key)
+    client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+    # Prompt is SHORTER + MUCH SAFER (reduces JSON hallucination)
     prompt = f"""
-Extract structured invoice or receipt data from the following text:
+Extract structured invoice data and return ONLY valid JSON.
 
+Text:
 {raw_text}
 
-Return ONLY valid JSON in this exact format:
-
+JSON format:
 {{
   "vendor": {{
     "name": "",
@@ -55,17 +53,32 @@ Return ONLY valid JSON in this exact format:
 }}
 """
 
-    # Call LLM
     resp = client.responses.create(
         model="gpt-4.1-mini",
         input=prompt,
         temperature=0
     )
 
-    json_str = resp.output[0].content[0].text
-    data = json.loads(json_str)
+    json_str = resp.output[0].content[0].text.strip()
 
-    # Match server expectation
+    # -------- FIX: Repair JSON if broken ------
+    try:
+        data = json.loads(json_str)
+    except Exception:
+        # Ask model to fix JSON
+        repair_prompt = f"""
+Fix and return ONLY valid JSON:
+
+{json_str}
+"""
+        repair = client.responses.create(
+            model="gpt-4.1-mini",
+            input=repair_prompt,
+            temperature=0
+        )
+        data = json.loads(repair.output[0].content[0].text.strip())
+    # ------------------------------------------
+
     class DummyModel:
         def __init__(self, d):
             self.d = d
