@@ -1,5 +1,6 @@
 from PIL import Image, ImageDraw
-from src.ocr.ocr import ocr_text
+from src.ocr.ocr import extract_text as ocr_text
+
 
 # 1) Create a simple image with “receipt-like” text
 img = Image.new("RGB", (800, 400), "white")
