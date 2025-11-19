@@ -14,60 +14,49 @@ def extract_structured(raw_text: str):
     key = os.getenv("OPENAI_API_KEY")
     client = OpenAI(api_key=key)
 
+    # UNIVERSAL INVOICE PARSING PROMPT
     prompt = f"""
-    Extract structured invoice data from this text:
+You are a highly accurate invoice/receipt parsing engine.
 
-    {raw_text}
+Extract structured data from the OCR text below and 
+return ONLY valid JSON in this exact structure, regardless of invoice layout:
 
-    Return ONLY valid JSON in this structure:
-
+{{
+  "vendor": {{
+    "name": "",
+    "address": "",
+    "phone": "",
+    "date": "",
+    "time": "",
+    "invoice_no": ""
+  }},
+  "items": [
     {{
-      "vendor": {{
-        "name": "",
-        "address": "",
-        "phone": "",
-        "date": "",
-        "time": "",
-        "invoice_no": ""
-      }},
-      "items": [
-        {{
-          "description": "",
-          "qty": 0,
-          "unit_price": 0,
-          "total": 0,
-          "sku": ""
-        }}
-      ],
-      "payment": {{
-        "method": "",
-        "currency": "USD",
-        "subtotal": 0,
-        "tax": 0,
-        "tip": 0,
-        "total": 0
-      }},
-      "_math": {{
-        "status": "ok",
-        "note": ""
-      }},
-      "raw_text": ""
+      "description": "",
+      "qty": 0,
+      "unit_price": 0,
+      "total": 0,
+      "sku": ""
     }}
-    """
+  ],
+  "payment": {{
+    "method": "",
+    "currency": "USD",
+    "subtotal": 0,
+    "tax": 0,
+    "tip": 0,
+    "total": 0
+  }},
+  "_math": {{
+    "status": "",
+    "note": ""
+  }},
+  "raw_text": ""
+}}
 
-    resp = client.responses.create(
-        model="gpt-4.1-mini",
-        input=prompt,
-        temperature=0
-    )
-
-    json_str = resp.output[0].content[0].text
-    data = json.loads(json_str)
-
-    class DummyModel:
-        def __init__(self, d):
-            self.d = d
-        def model_dump(self):
-            return self.d
-
-    return DummyModel(data)
+RULES:
+- Automatically identify all line items.
+- Automatically extract vendor information.
+- Automatically extract invoice number, date, time, phone, address.
+- Automatically extract subtotal, tax, tip, total.
+- Automatically detect payment method (ACH, VISA, Mastercard, Cash, etc).
