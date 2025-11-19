@@ -55,11 +55,12 @@ JSON format:
 """
 
     # FIRST TRY
-    resp = client.responses.create(
-        model="gpt-4.1-turbo",
-        input=prompt,
-        temperature=0
-    )
+   repair = client.responses.create(
+    model="gpt-4o-mini",
+    input=repair_prompt,
+    temperature=0
+)
+
 
     # Extract model output
     first = resp.output[0].content[0].text.strip()
