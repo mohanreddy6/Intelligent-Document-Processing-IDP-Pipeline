@@ -3,100 +3,98 @@ import os
 import json
 from openai import OpenAI
 
+
 def extract_structured(raw_text: str):
-    """
-    LLM-based structured extraction with safe JSON repair.
-    Never throws JSONDecodeError.
-    """
 
     client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
-    # 1. Ask model for JSON
-    prompt = f"""
-You are an OCR invoice parser. 
-Extract structured JSON ONLY.
-
-TEXT:
-{raw_text}
-
-Return ONLY this JSON structure:
-
-{{
-  "vendor": {{
+    schema = """
+{
+  "vendor": {
     "name": "",
     "address": "",
     "phone": "",
     "date": "",
     "time": "",
     "invoice_no": ""
-  }},
-  "items": [],
-  "payment": {{
+  },
+  "items": [
+    {
+      "description": "",
+      "qty": 0,
+      "unit_price": 0,
+      "total": 0
+    }
+  ],
+  "payment": {
     "method": "",
     "currency": "USD",
     "subtotal": 0,
     "tax": 0,
     "tip": 0,
     "total": 0
-  }},
-  "_math": {{
+  },
+  "_math": {
     "status": "ok",
     "note": ""
-  }},
+  },
   "raw_text": ""
-}}
-    """
+}
+"""
 
-    # Ask LLM
+    prompt = f"""
+Extract structured invoice data from the text below.
+
+TEXT:
+{raw_text}
+
+Return ONLY valid JSON matching this schema:
+{schema}
+"""
+
+    # MAIN extraction
     resp = client.responses.create(
-        model="gpt-4.1-mini",
+        model="gpt-4.1",    # stronger model
         input=prompt,
         temperature=0
     )
 
-    raw_output = resp.output[0].content[0].text.strip()
+    output = resp.output[0].content[0].text.strip()
 
-    # 2. If output is empty → fallback
-    if not raw_output:
-        return _fallback_model()
+    data = _safe_json(output)
+    if data:
+        data["raw_text"] = raw_text
+        return DummyModel(data)
 
-    # 3. Try load JSON directly
-    try:
-        data = json.loads(raw_output)
-        return _wrap(data)
-    except:
-        pass  # Continue to repair step
+    # Try repair
+    repair_prompt = f"Fix this so it is valid JSON ONLY:\n\n{output}"
 
-    # 4. Try repairing JSON
-    repair_prompt = f"Fix this so it becomes valid JSON ONLY:\n\n{raw_output}"
     fix = client.responses.create(
-        model="gpt-4.1-mini",
+        model="gpt-4.1",
         input=repair_prompt,
         temperature=0
     )
 
     fixed = fix.output[0].content[0].text.strip()
 
+    data = _safe_json(fixed)
+    if data:
+        data["raw_text"] = raw_text
+        return DummyModel(data)
+
+    # Fallback
+    return DummyModel(_fallback(raw_text))
+
+
+def _safe_json(text):
     try:
-        data = json.loads(fixed)
-        return _wrap(data)
+        return json.loads(text)
     except:
-        return _fallback_model()
+        return None
 
 
-# ---------- helper wrappers ----------
-class DummyModel:
-    def __init__(self, d):
-        self.d = d
-    def model_dump(self):
-        return self.d
-
-def _wrap(d):
-    return DummyModel(d)
-
-def _fallback_model():
-    # return empty safe structure instead of crashing
-    return DummyModel({
+def _fallback(raw):
+    return {
         "vendor": {
             "name": "",
             "address": "",
@@ -114,6 +112,13 @@ def _fallback_model():
             "tip": 0,
             "total": 0
         },
-        "_math": { "status": "failed", "note": "LLM returned invalid JSON" },
-        "raw_text": ""
-    })
+        "_math": {"status": "failed", "note": "LLM could not parse"},
+        "raw_text": raw
+    }
+
+
+class DummyModel:
+    def __init__(self, d):
+        self.d = d
+    def model_dump(self):
+        return self.d
