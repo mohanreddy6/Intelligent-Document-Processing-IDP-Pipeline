@@ -15,11 +15,9 @@ from src.ocr.parse import parse_invoice     # rule-based parser
 from src.ocr.validate import reconcile_payment
 
 # Try to import the LLM extractor (optional)
+from src.llm.extract import extract_structured as llm_extract_structured
 HAS_LLM = True
-try:
-    from src.llm.extract import extract_structured as llm_extract_structured
-except Exception:
-    HAS_LLM = False
+
 
 # -----------------------------------------------------------------------------
 # App setup
