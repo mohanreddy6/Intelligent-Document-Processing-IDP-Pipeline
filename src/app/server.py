@@ -74,16 +74,10 @@ def _run_ocr(img: Image.Image) -> str:
 
 
 def _parse_structured(text: str) -> Dict[str, Any]:
-    """
-    Prefer LLM parser when available; otherwise use rule-based parse_invoice.
-    """
-    if HAS_LLM:
-        try:
-            result = llm_extract_structured(text)  # pydantic model
-            return result.model_dump()
-        except Exception:
-            pass
-    return parse_invoice(text)
+    # Always use LLM parser
+    result = llm_extract_structured(text)
+    return result.model_dump()
+
 
 # -----------------------------------------------------------------------------
 # Routes
