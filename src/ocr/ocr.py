@@ -1,59 +1,27 @@
-import os
-from openai import OpenAI
+# src/ocr/ocr.py
 
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+import pytesseract
+from PIL import Image
 
-def parse_receipt(raw_text: str) -> dict:
+def ocr_text(file_or_image):
     """
-    Parse raw OCR text into structured fields using OpenAI.
-    """
-
-    prompt = f"""
-    You are a receipt parsing engine. 
-    Extract structured data from the following text:
-
-    {raw_text}
-
-    Return ONLY valid JSON with this structure:
-
-    {{
-        "vendor": {{
-            "name": "",
-            "address": "",
-            "phone": "",
-            "date": "",
-            "time": "",
-            "invoice_no": ""
-        }},
-        "items": [
-            {{
-                "description": "",
-                "qty": 0,
-                "unit_price": 0,
-                "total": 0,
-                "sku": ""
-            }}
-        ],
-        "payment": {{
-            "method": "",
-            "currency": "USD",
-            "subtotal": 0,
-            "tax": 0,
-            "tip": 0,
-            "total": 0
-        }},
-        "_math": {{
-            "status": "ok",
-            "note": ""
-        }},
-        "raw_text": ""
-    }}
+    Real OCR with image resizing to prevent Render memory crash.
     """
 
-    response = client.responses.create(
-        model="gpt-4.1-mini",
-        input=prompt,
-        temperature=0
-    )
+    # CASE 1: Already a Pillow Image
+    if isinstance(file_or_image, Image.Image):
+        image = file_or_image.convert("RGB")
+    else:
+        # CASE 2: Flask file upload
+        image = Image.open(file_or_image).convert("RGB")
 
-    return response.output[0].content[0].text
+    # RESIZE LARGE IMAGES (critical for Render free tier)
+    MAX_WIDTH = 1200
+    if image.width > MAX_WIDTH:
+        ratio = MAX_WIDTH / float(image.width)
+        new_height = int(image.height * ratio)
+        image = image.resize((MAX_WIDTH, new_height), Image.LANCZOS)
+
+    # Run Tesseract
+    text = pytesseract.image_to_string(image)
+    return text
